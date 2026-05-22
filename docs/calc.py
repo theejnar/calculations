@@ -3,7 +3,6 @@
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 
 from itertools import product
-from math import isclose
 
 
 def find_best_combination(
@@ -21,17 +20,11 @@ def find_best_combination(
             if total_items == 0:
                 continue
             total_distance = sum(d * c for d, c in zip(distances, counts))
-            num_gaps = total_items - 1
-            if num_gaps == 0:
-                if isclose(total_distance, total_length, abs_tol=tolerance):
-                    gap = from_gap
-                else:
-                    continue
-            else:
-                gap = (total_length - total_distance) / num_gaps
-                if gap < from_gap - tolerance or gap > to_gap + tolerance:
-                    continue
-                gap = max(from_gap, min(to_gap, gap))
+            num_gaps = total_items
+            gap = (total_length - total_distance) / num_gaps
+            if gap < from_gap - tolerance or gap > to_gap + tolerance:
+                continue
+            gap = max(from_gap, min(to_gap, gap))
 
             total_combined = total_distance + num_gaps * gap
             nonzero_counts = [c for c in counts if c > 0]
