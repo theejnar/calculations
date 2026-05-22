@@ -1,0 +1,30 @@
+fail_fast: true
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: pretty-format-json
+        args: [ --autofix ]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+        args: [ --fix ]
+  - repo: https://github.com/pylint-dev/pylint
+    rev: v4.0.5
+    hooks:
+      - id: pylint
+  - repo: local
+    hooks:
+      - id: coverage-check
+        name: kp2_lib coverage >= 73%
+        entry: pytest tests --cov=kp2_lib --cov-fail-under=73 -v
+        language: system
+        verbose: true
+        pass_filenames: false
+        files: ^(kp2\.py|kp2_lib/|tests/test_kp2)

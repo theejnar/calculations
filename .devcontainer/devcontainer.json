@@ -1,0 +1,50 @@
+{
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "eamodio.gitlens",
+        "jebbs.plantuml",
+        "ms-python.autopep8",
+        "ms-python.debugpy",
+        "ms-python.pylint",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "njpwerner.autodocstring",
+        "redhat.vscode-yaml",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "python.analysis.ignore": [
+          "**"
+        ],
+        "workbench.colorCustomizations": {
+          "titleBar.activeBackground": "#1a5276",
+          "titleBar.activeForeground": "#ffffff",
+          "titleBar.inactiveBackground": "#1a527699"
+        }
+      }
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4
+  },
+  "mounts": [
+    "type=volume,source=bash-history-${localWorkspaceFolderBasename},target=/home/vscode/.bash_history_vol",
+    "type=volume,source=zsh-history-${localWorkspaceFolderBasename},target=/home/vscode/.zsh_history_vol",
+    "type=volume,source=fish-history-${localWorkspaceFolderBasename},target=/home/vscode/.fish_history_vol",
+    "type=volume,source=atuin-data-${localWorkspaceFolderBasename},target=/home/vscode/.local/share/atuin"
+  ],
+  "name": "calculations Dev",
+  "postCreateCommand": ".devcontainer/post-create.sh '${localEnv:SHELL}'",
+  "remoteUser": "vscode",
+  "runArgs": [
+    "--cpus=4",
+    "--ulimit",
+    "nofile=65536:65536"
+  ]
+}
