@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Area Calculator via Triangulation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        #loading {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        #app {
+            display: none;
+        }
+
+        #result-card,
+        #error-card {
+            display: none;
+        }
+
+        .side-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .side-row label {
+            margin: 0;
+            font-weight: 600;
+            min-width: 3rem;
+        }
+
+        .side-row input {
+            margin: 0;
+        }
+
+        .triangle-row {
+            display: grid;
+            grid-template-columns: auto 1fr 1fr 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .triangle-row label {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .triangle-row select {
+            margin: 0;
+        }
+
+        #canvas-container {
+            display: none;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        #preview-canvas {
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: 4px;
+            max-width: 100%;
+        }
+
+        .result-table td:first-child {
+            font-weight: 600;
+        }
+
+        .add-btn {
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        nav a {
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <nav>
+            <ul>
+                <li><a href="index.html">← Back to Calculations</a></li>
+            </ul>
+        </nav>
+
+        <h1>Area Calculator via Triangulation</h1>
+        <p>Calculate any polygon's area by measuring the sides of surrounding triangles.</p>
+
+        <div id="loading" aria-busy="true">
+            <p>Loading Python runtime (first load may take a few seconds)…</p>
+        </div>
+
+        <div id="app">
+            <form id="area-form" onsubmit="return false;">
+                <!-- Inner sides -->
+                <fieldset>
+                    <legend>Inner sides (polygon to measure)</legend>
+                    <div id="inner-sides"></div>
+                    <button type="button" class="add-btn secondary outline" onclick="addSide('inner')">+ Add inner
+                        side</button>
+                </fieldset>
+
+                <!-- Outer sides -->
+                <fieldset>
+                    <legend>Outer sides (surrounding boundary)</legend>
+                    <div id="outer-sides"></div>
+                    <button type="button" class="add-btn secondary outline" onclick="addSide('outer')">+ Add outer
+                        side</button>
+                </fieldset>
+
+                <!-- Diagonals -->
+                <fieldset>
+                    <legend>Diagonals (connecting inner to outer)</legend>
+                    <div id="diagonal-sides"></div>
+                    <button type="button" class="add-btn secondary outline" onclick="addSide('diagonal')">+ Add
+                        diagonal</button>
+                </fieldset>
+
+                <!-- Triangles -->
+                <fieldset>
+                    <legend>Triangles (each = 2 diagonals + 1 inner or outer)</legend>
+                    <div id="triangles"></div>
+                    <button type="button" class="add-btn secondary outline" onclick="addTriangle()">+ Add
+                        triangle</button>
+                    <button type="button" class="add-btn outline" onclick="suggestTriangles()">Auto-suggest
+                        triangles</button>
+                </fieldset>
+
+                <button type="submit" id="calc-btn">Calculate Area</button>
+            </form>
+
+            <!-- Results -->
+            <article id="result-card">
+                <header><strong>Results</strong></header>
+                <table id="result-table" role="grid">
+                    <tbody></tbody>
+                </table>
+            </article>
+
+            <article id="error-card">
+                <header><strong>Error</strong></header>
+                <p id="error-msg"></p>
+            </article>
+
+            <!-- Canvas preview -->
+            <div id="canvas-container">
+                <h3>Visual Preview</h3>
+                <canvas id="preview-canvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+    <script>
+        let pyodide = null;
+        const sideCounts = { inner: 0, outer: 0, diagonal: 0 };
+        let triangleCount = 0;
+
+        async function initPyodide() {
+            pyodide = await loadPyodide();
+            const response = await fetch("area.py");
+            const code = await response.text();
+            await pyodide.runPythonAsync(code);
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("app").style.display = "block";
+            // Add initial sides for a common case (4 inner, 4 outer, 8 diagonals)
+            for (let i = 0; i < 4; i++) addSide('inner');
+            for (let i = 0; i < 4; i++) addSide('outer');
+            for (let i = 0; i < 8; i++) addSide('diagonal');
+            for (let i = 0; i < 8; i++) addTriangle();
+        }
+
+        function addSide(type) {
+            const prefix = type === 'inner' ? 'i' : type === 'outer' ? 'o' : 'd';
+            const idx = sideCounts[type]++;
+            const name = `${prefix}${idx}`;
+            const container = document.getElementById(`${type}-sides`);
+            const row = document.createElement('div');
+            row.className = 'side-row';
+            row.dataset.sideName = name;
+            row.innerHTML = `
+                <label>${name}</label>
+                <input type="number" step="any" min="0.001" placeholder="length" required data-side="${name}">
+                <button type="button" class="secondary outline" onclick="removeSide(this, '${type}')" style="padding:0.3rem 0.6rem;margin:0">×</button>
+            `;
+            container.appendChild(row);
+            updateTriangleSelects();
+        }
+
+        function removeSide(btn, type) {
+            btn.closest('.side-row').remove();
+            updateTriangleSelects();
+        }
+
+        function addTriangle() {
+            const idx = triangleCount++;
+            const container = document.getElementById('triangles');
+            const row = document.createElement('div');
+            row.className = 'triangle-row';
+            row.innerHTML = `
+                <label>T${idx}</label>
+                <select data-tri="${idx}" data-pos="0" required><option value="">side 1</option></select>
+                <select data-tri="${idx}" data-pos="1" required><option value="">side 2</option></select>
+                <select data-tri="${idx}" data-pos="2" required><option value="">side 3</option></select>
+                <button type="button" class="secondary outline" onclick="removeTriangle(this)" style="padding:0.3rem 0.6rem;margin:0">×</button>
+            `;
+            container.appendChild(row);
+            updateTriangleSelects();
+        }
+
+        function removeTriangle(btn) {
+            btn.closest('.triangle-row').remove();
+        }
+
+        function getAllSideNames() {
+            const names = [];
+            document.querySelectorAll('.side-row').forEach(row => {
+                names.push(row.dataset.sideName);
+            });
+            return names;
+        }
+
+        function updateTriangleSelects() {
+            const names = getAllSideNames();
+            document.querySelectorAll('.triangle-row select').forEach(sel => {
+                const current = sel.value;
+                sel.innerHTML = '<option value="">--</option>';
+                names.forEach(n => {
+                    const opt = document.createElement('option');
+                    opt.value = n;
+                    opt.textContent = n;
+                    if (n === current) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            });
+        }
+
+        function collectInput() {
+            const sides = {};
+            document.querySelectorAll('.side-row').forEach(row => {
+                const name = row.dataset.sideName;
+                const input = row.querySelector('input');
+                const length = parseFloat(input.value);
+                if (isNaN(length) || length <= 0) throw new Error(`Invalid length for ${name}`);
+                let type = 'diagonal';
+                if (name.startsWith('i')) type = 'inner';
+                else if (name.startsWith('o')) type = 'outer';
+                sides[name] = { length, type };
+            });
+
+            const triangles = [];
+            document.querySelectorAll('.triangle-row').forEach(row => {
+                const selects = row.querySelectorAll('select');
+                const tri = [];
+                selects.forEach(sel => {
+                    if (!sel.value) throw new Error(`Incomplete triangle definition`);
+                    tri.push(sel.value);
+                });
+                triangles.push(tri);
+            });
+
+            return { sides, triangles };
+        }
+
+        function showError(msg) {
+            document.getElementById("error-msg").textContent = msg;
+            document.getElementById("error-card").style.display = "block";
+            document.getElementById("result-card").style.display = "none";
+            document.getElementById("canvas-container").style.display = "none";
+        }
+
+        function showResult(result) {
+            document.getElementById("error-card").style.display = "none";
+            const card = document.getElementById("result-card");
+            const tbody = card.querySelector("tbody");
+            tbody.innerHTML = "";
+
+            const addRow = (label, value) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${label}</td><td>${value}</td>`;
+                tbody.appendChild(tr);
+            };
+
+            addRow("Strategy A (shoelace on inner)", result.strategy_a.toFixed(6));
+            addRow("Strategy B (outer − triangles)", result.strategy_b.toFixed(6));
+            const diff = Math.abs(result.strategy_a - result.strategy_b);
+            addRow("Difference", diff.toFixed(10));
+            addRow("Outer polygon area", result.outer_area.toFixed(6));
+            addRow("Total triangle area", result.total_triangle_area.toFixed(6));
+
+            result.triangle_areas.forEach((a, i) => {
+                addRow(`Triangle ${i} area`, a.toFixed(6));
+            });
+
+            card.style.display = "block";
+        }
+
+        function drawPreview(result) {
+            const container = document.getElementById("canvas-container");
+            container.style.display = "block";
+            const canvas = document.getElementById("preview-canvas");
+            const ctx = canvas.getContext("2d");
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const coords = result.coords;
+            const allPoints = Object.values(coords);
+            if (allPoints.length === 0) return;
+
+            // Find bounding box
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            allPoints.forEach(([x, y]) => {
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            });
+
+            const padding = 40;
+            const scaleX = (w - 2 * padding) / (maxX - minX || 1);
+            const scaleY = (h - 2 * padding) / (maxY - minY || 1);
+            const scale = Math.min(scaleX, scaleY);
+            const offsetX = padding + ((w - 2 * padding) - (maxX - minX) * scale) / 2;
+            const offsetY = padding + ((h - 2 * padding) - (maxY - minY) * scale) / 2;
+
+            function tx(x) { return offsetX + (x - minX) * scale; }
+            function ty(y) { return h - (offsetY + (y - minY) * scale); }
+
+            // Draw inner polygon filled
+            if (result.inner_loop.length >= 3) {
+                ctx.beginPath();
+                const first = coords[result.inner_loop[0]];
+                ctx.moveTo(tx(first[0]), ty(first[1]));
+                for (let i = 1; i < result.inner_loop.length; i++) {
+                    const p = coords[result.inner_loop[i]];
+                    ctx.lineTo(tx(p[0]), ty(p[1]));
+                }
+                ctx.closePath();
+                ctx.fillStyle = "rgba(100, 149, 237, 0.4)";
+                ctx.fill();
+                ctx.strokeStyle = "#4472C4";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Draw outer polygon outline
+            if (result.outer_loop.length >= 3) {
+                ctx.beginPath();
+                const first = coords[result.outer_loop[0]];
+                ctx.moveTo(tx(first[0]), ty(first[1]));
+                for (let i = 1; i < result.outer_loop.length; i++) {
+                    const p = coords[result.outer_loop[i]];
+                    ctx.lineTo(tx(p[0]), ty(p[1]));
+                }
+                ctx.closePath();
+                ctx.strokeStyle = "#2B4570";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            // Draw triangle edges (diagonals)
+            ctx.strokeStyle = "#8FAADC";
+            ctx.lineWidth = 0.8;
+            result.tri_vertex_ids.forEach(vids => {
+                for (let i = 0; i < 3; i++) {
+                    const j = (i + 1) % 3;
+                    const p1 = coords[vids[i]];
+                    const p2 = coords[vids[j]];
+                    ctx.beginPath();
+                    ctx.moveTo(tx(p1[0]), ty(p1[1]));
+                    ctx.lineTo(tx(p2[0]), ty(p2[1]));
+                    ctx.stroke();
+                }
+            });
+
+            // Label vertices
+            ctx.fillStyle = "#333";
+            ctx.font = "11px sans-serif";
+            Object.entries(coords).forEach(([id, [x, y]]) => {
+                ctx.fillText(id, tx(x) + 4, ty(y) - 4);
+            });
+        }
+
+        function suggestTriangles() {
+            try {
+                const sides = {};
+                document.querySelectorAll('.side-row').forEach(row => {
+                    const name = row.dataset.sideName;
+                    const input = row.querySelector('input');
+                    const length = parseFloat(input.value) || 1;
+                    let type = 'diagonal';
+                    if (name.startsWith('i')) type = 'inner';
+                    else if (name.startsWith('o')) type = 'outer';
+                    sides[name] = { length, type };
+                });
+
+                const result = pyodide.runPython(`
+import json
+_sides = json.loads('${JSON.stringify(sides).replace(/'/g, "\\'")}')
+json.dumps(suggest_triangles(_sides))
+`);
+                const suggested = JSON.parse(result);
+
+                // Clear existing triangles
+                document.getElementById('triangles').innerHTML = '';
+                triangleCount = 0;
+
+                // Add suggested triangles
+                suggested.forEach(tri => {
+                    addTriangle();
+                    const row = document.getElementById('triangles').lastElementChild;
+                    const selects = row.querySelectorAll('select');
+                    selects[0].value = tri[0];
+                    selects[1].value = tri[1];
+                    selects[2].value = tri[2];
+                });
+            } catch (e) {
+                showError(e.message || String(e));
+            }
+        }
+
+        document.getElementById("area-form").addEventListener("submit", async () => {
+            const btn = document.getElementById("calc-btn");
+            btn.setAttribute("aria-busy", "true");
+            btn.disabled = true;
+
+            try {
+                const { sides, triangles } = collectInput();
+
+                const result = pyodide.runPython(`
+import json
+_sides = json.loads('${JSON.stringify(sides).replace(/'/g, "\\'")}')
+_triangles = json.loads('${JSON.stringify(triangles).replace(/'/g, "\\'")}')
+_result = calculate_area(_triangles, _sides)
+# Convert coords keys to strings for JSON
+_out = {
+    "strategy_a": _result["strategy_a"],
+    "strategy_b": _result["strategy_b"],
+    "triangle_areas": _result["triangle_areas"],
+    "total_triangle_area": _result["total_triangle_area"],
+    "outer_area": _result["outer_area"],
+    "coords": {str(k): list(v) for k, v in _result["coords"].items()},
+    "inner_loop": [str(v) for v in _result["inner_loop"]],
+    "outer_loop": [str(v) for v in _result["outer_loop"]],
+    "tri_vertex_ids": [[str(v) for v in tri] for tri in _result["tri_vertex_ids"]],
+}
+json.dumps(_out)
+`);
+
+                const parsed = JSON.parse(result);
+                // Convert string keys back to usable format for drawing
+                const coordsMap = {};
+                Object.entries(parsed.coords).forEach(([k, v]) => {
+                    coordsMap[k] = v;
+                });
+                parsed.coords = coordsMap;
+
+                showResult(parsed);
+                drawPreview(parsed);
+
+            } catch (e) {
+                showError(e.message || String(e));
+            } finally {
+                btn.removeAttribute("aria-busy");
+                btn.disabled = false;
+            }
+        });
+
+        initPyodide();
+    </script>
+</body>
+
+</html>

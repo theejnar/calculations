@@ -4,201 +4,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Distance Combination Calculator</title>
+    <title>Calculations</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <style>
-        #loading {
-            text-align: center;
-            padding: 2rem;
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
         }
 
-        #result-card {
-            display: none;
+        .card-grid article {
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
 
-        #error-card {
-            display: none;
+        .card-grid article:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
-        .result-table td:first-child {
+        .card-grid article header {
+            font-size: 1.2rem;
             font-weight: 600;
-        }
-
-        details {
-            margin-bottom: 1rem;
         }
     </style>
 </head>
 
 <body>
     <main class="container">
-        <h1>Distance Combination Calculator</h1>
-        <p>Find the best combination of distances with gaps that fit a total length.</p>
+        <h1>Calculations</h1>
+        <p>A collection of browser-based calculation tools. No server needed — everything runs in your browser.</p>
 
-        <div id="loading" aria-busy="true">
-            <p>Loading Python runtime (first load may take a few seconds)…</p>
+        <div class="card-grid">
+            <article onclick="location.href='calc.html'">
+                <header>Distance Combination Calculator</header>
+                <p>Find the best combination of distances with gaps that fit a total length.</p>
+            </article>
+
+            <article onclick="location.href='area.html'">
+                <header>Area Calculator via Triangulation</header>
+                <p>Calculate any polygon's area by measuring the sides of surrounding triangles.</p>
+            </article>
         </div>
-
-        <form id="calc-form" style="display:none;" onsubmit="return false;">
-            <fieldset>
-                <label for="distances">
-                    Distances
-                    <input type="text" id="distances" name="distances" placeholder="e.g. 25.5 40 80" required>
-                    <small>1–10 space-separated values</small>
-                </label>
-
-                <div class="grid">
-                    <label for="from_gap">
-                        From gap
-                        <input type="number" id="from_gap" name="from_gap" step="any" placeholder="e.g. 2" required>
-                    </label>
-                    <label for="to_gap">
-                        To gap
-                        <input type="number" id="to_gap" name="to_gap" step="any" placeholder="e.g. 5" required>
-                    </label>
-                </div>
-
-                <label for="total_length">
-                    Total length
-                    <input type="number" id="total_length" name="total_length" step="any" placeholder="e.g. 200"
-                        required>
-                </label>
-
-                <details>
-                    <summary>Advanced</summary>
-                    <div class="grid">
-                        <label for="tolerance">
-                            Tolerance
-                            <input type="number" id="tolerance" name="tolerance" step="any" value="0.001">
-                        </label>
-                        <label for="gap_step">
-                            Gap step
-                            <input type="number" id="gap_step" name="gap_step" step="any" value="0.1">
-                            <small>Resolution for rounding the gap value (smaller = more precise but slower)</small>
-                        </label>
-                    </div>
-                </details>
-            </fieldset>
-
-            <button type="submit" id="calc-btn">Calculate</button>
-        </form>
-
-        <article id="result-card">
-            <header><strong>Result</strong></header>
-            <table id="result-table" role="grid">
-                <tbody></tbody>
-            </table>
-        </article>
-
-        <article id="error-card">
-            <header><strong>Error</strong></header>
-            <p id="error-msg"></p>
-        </article>
     </main>
-
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
-    <script>
-        let pyodide = null;
-
-        async function initPyodide() {
-            pyodide = await loadPyodide();
-            const response = await fetch("calc.py");
-            const code = await response.text();
-            await pyodide.runPythonAsync(code);
-            document.getElementById("loading").style.display = "none";
-            document.getElementById("calc-form").style.display = "block";
-        }
-
-        function showError(msg) {
-            document.getElementById("error-msg").textContent = msg;
-            document.getElementById("error-card").style.display = "block";
-            document.getElementById("result-card").style.display = "none";
-        }
-
-        function showResult(result) {
-            document.getElementById("error-card").style.display = "none";
-            const card = document.getElementById("result-card");
-            const tbody = card.querySelector("tbody");
-            tbody.innerHTML = "";
-
-            const addRow = (label, value) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `<td>${label}</td><td>${value}</td>`;
-                tbody.appendChild(tr);
-            };
-
-            addRow("Gap", result.gap);
-            addRow("Total length achieved", result.total_length);
-
-            for (const [dist, count] of Object.entries(result.counts)) {
-                addRow(`Distance ${dist}`, `× ${count}`);
-            }
-
-            card.style.display = "block";
-        }
-
-        document.getElementById("calc-form").addEventListener("submit", async () => {
-            const btn = document.getElementById("calc-btn");
-            btn.setAttribute("aria-busy", "true");
-            btn.disabled = true;
-
-            try {
-                const distancesRaw = document.getElementById("distances").value.trim();
-                const distances = distancesRaw.split(/\s+/).map(Number);
-
-                if (distances.length < 1 || distances.length > 10 || distances.some(isNaN) || distances.some(d => d <= 0)) {
-                    showError("Distances must be 1–10 positive numbers separated by spaces.");
-                    return;
-                }
-
-                const fromGap = parseFloat(document.getElementById("from_gap").value);
-                const toGap = parseFloat(document.getElementById("to_gap").value);
-                const totalLength = parseFloat(document.getElementById("total_length").value);
-                const tolerance = parseFloat(document.getElementById("tolerance").value) || 0.001;
-                const gapStep = parseFloat(document.getElementById("gap_step").value) || 0.1;
-
-                if (isNaN(fromGap) || isNaN(toGap) || isNaN(totalLength)) {
-                    showError("From gap, To gap, and Total length must be valid numbers.");
-                    return;
-                }
-                if (fromGap > toGap) {
-                    showError("From gap must be less than or equal to To gap.");
-                    return;
-                }
-                if (totalLength <= 0) {
-                    showError("Total length must be positive.");
-                    return;
-                }
-
-                const pyCode = `
-import json
-result = find_best_combination(
-    ${JSON.stringify(distances)},
-    ${fromGap},
-    ${toGap},
-    ${totalLength},
-    tolerance=${tolerance},
-    gap_step=${gapStep}
-)
-json.dumps(result) if result else ""
-`;
-                const raw = await pyodide.runPythonAsync(pyCode);
-
-                if (!raw) {
-                    showError("No suitable combination found.");
-                } else {
-                    showResult(JSON.parse(raw));
-                }
-            } catch (e) {
-                showError("Calculation error: " + e.message);
-            } finally {
-                btn.removeAttribute("aria-busy");
-                btn.disabled = false;
-            }
-        });
-
-        initPyodide();
-    </script>
 </body>
 
 </html>
