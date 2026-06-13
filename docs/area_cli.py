@@ -2,11 +2,48 @@
 
 # pylint: disable=too-many-locals,too-many-statements
 
-from area import calculate_area, MeasurementError
+import argparse
+import sys
+
+from area import (
+    calculate_area,
+    export_measurement,
+    import_measurement,
+    MeasurementError,
+)
 
 
-def main():
-    """Run the interactive area calculator CLI."""
+def display_results(result):
+    """Display calculation results."""
+    print("=" * 60)
+    print("  RESULTS")
+    print("=" * 60)
+    print()
+    print("  Strategy A (coordinate reconstruction + shoelace):")
+    print(f"    Inner polygon area = {result['strategy_a']:.6f}")
+    print()
+    print("  Strategy B (outer area - triangle areas):")
+    print(f"    Outer polygon area = {result['outer_area']:.6f}")
+    print(f"    Total triangle area = {result['total_triangle_area']:.6f}")
+    print(f"    Inner polygon area = {result['strategy_b']:.6f}")
+    print()
+
+    diff = abs(result["strategy_a"] - result["strategy_b"])
+    print(f"  Difference between strategies: {diff:.10f}")
+    if diff < 1e-6:
+        print("  ✓ Results match (measurements are consistent)")
+    else:
+        print("  ⚠ Results differ (possible measurement inaccuracy)")
+    print()
+
+    print("  Individual triangle areas:")
+    for i, area in enumerate(result["triangle_areas"]):
+        print(f"    Triangle {i}: {area:.6f}")
+    print()
+
+
+def interactive_input():
+    """Gather sides and triangles interactively from the user."""
     print("=" * 60)
     print("  Area Calculator via Triangulation")
     print("  Calculate any polygon's area by measuring surrounding lines")
@@ -60,39 +97,80 @@ def main():
             break
     print()
 
-    # Calculate
+    return sides, triangles
+
+
+def do_export(sides, triangles, result, filepath):
+    """Export measurement data to a JSON file."""
+    name = ""
+    notes = ""
+    if sys.stdin.isatty():
+        name = input("  Measurement name (Enter to skip): ").strip()
+        notes = input("  Notes (Enter to skip): ").strip()
+    json_str = export_measurement(sides, triangles, result, name=name, notes=notes)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(json_str)
+    print(f"  ✓ Exported to {filepath}")
+    print()
+
+
+def do_import(filepath):
+    """Import measurement data from a JSON file."""
+    with open(filepath, "r", encoding="utf-8") as f:
+        json_str = f.read()
+    data = import_measurement(json_str)
+
+    metadata = data.get("metadata", {})
+    if metadata:
+        print("  Imported measurement:")
+        if metadata.get("name"):
+            print(f"    Name: {metadata['name']}")
+        if metadata.get("date"):
+            print(f"    Date: {metadata['date']}")
+        if metadata.get("notes"):
+            print(f"    Notes: {metadata['notes']}")
+        print()
+
+    return data["sides"], data["triangles"]
+
+
+def main():
+    """Run the area calculator CLI."""
+    parser = argparse.ArgumentParser(description="Area Calculator via Triangulation")
+    parser.add_argument(
+        "--import-file",
+        metavar="FILE",
+        help="Import measurements from a JSON file (skips interactive input)",
+    )
+    parser.add_argument(
+        "--export-file",
+        metavar="FILE",
+        help="Export measurements and results to a JSON file after calculation",
+    )
+    args = parser.parse_args()
+
     try:
+        if args.import_file:
+            sides, triangles = do_import(args.import_file)
+        else:
+            sides, triangles = interactive_input()
+
         result = calculate_area(triangles, sides)
+        display_results(result)
+
+        if args.export_file:
+            do_export(sides, triangles, result, args.export_file)
+
     except MeasurementError as e:
-        print(f"ERROR: {e}")
-        return
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # Display results
-    print("=" * 60)
-    print("  RESULTS")
-    print("=" * 60)
-    print()
-    print("  Strategy A (coordinate reconstruction + shoelace):")
-    print(f"    Inner polygon area = {result['strategy_a']:.6f}")
-    print()
-    print("  Strategy B (outer area - triangle areas):")
-    print(f"    Outer polygon area = {result['outer_area']:.6f}")
-    print(f"    Total triangle area = {result['total_triangle_area']:.6f}")
-    print(f"    Inner polygon area = {result['strategy_b']:.6f}")
-    print()
 
-    diff = abs(result["strategy_a"] - result["strategy_b"])
-    print(f"  Difference between strategies: {diff:.10f}")
-    if diff < 1e-6:
-        print("  ✓ Results match (measurements are consistent)")
-    else:
-        print("  ⚠ Results differ (possible measurement inaccuracy)")
-    print()
-
-    print("  Individual triangle areas:")
-    for i, area in enumerate(result["triangle_areas"]):
-        print(f"    Triangle {i}: {area:.6f}")
-    print()
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
