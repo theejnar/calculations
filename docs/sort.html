@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pairwise List Sorter</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        .compare-container {
+            display: flex;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .compare-container button {
+            flex: 1;
+            min-height: 80px;
+            font-size: 1.1rem;
+            word-break: break-word;
+        }
+
+        .import-section textarea {
+            min-height: 120px;
+            font-family: monospace;
+        }
+
+        .result-list {
+            list-style: decimal;
+            padding-left: 1.5rem;
+        }
+
+        .result-list li {
+            padding: 0.3rem 0;
+        }
+
+        .progress-bar {
+            margin: 1rem 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .resume-banner {
+            background: var(--pico-primary-focus);
+            padding: 1rem;
+            border-radius: var(--pico-border-radius);
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <nav>
+            <ul>
+                <li><a href="index.html">&larr; Back to Calculations</a></li>
+            </ul>
+        </nav>
+
+        <h1>Pairwise List Sorter</h1>
+        <p>Rank a list of items by choosing your preference in each pair. Uses an efficient merge sort — fewest
+            comparisons needed.</p>
+
+        <!-- Resume Banner -->
+        <div id="resume-banner" class="resume-banner hidden">
+            <p><strong>You have a saved session.</strong> Would you like to continue where you left off?</p>
+            <button id="btn-resume">Resume</button>
+            <button id="btn-discard" class="secondary">Start Fresh</button>
+        </div>
+
+        <!-- Import Section -->
+        <section id="section-import">
+            <fieldset>
+                <legend>Import your list</legend>
+                <p>Load a plain text file (one item per line) or paste items below.</p>
+                <label>
+                    <input type="file" id="file-input" accept=".txt,text/plain">
+                </label>
+                <label>
+                    Or paste items here (one per line):
+                    <textarea id="paste-input" placeholder="Item 1&#10;Item 2&#10;Item 3&#10;..."></textarea>
+                </label>
+                <button id="btn-start">Start Sorting</button>
+            </fieldset>
+        </section>
+
+        <!-- Comparison Section -->
+        <section id="section-compare" class="hidden">
+            <h2>Which do you prefer?</h2>
+            <div class="progress-bar">
+                <progress id="progress" value="0" max="100"></progress>
+                <small id="progress-text">Comparison 0 of ~0</small>
+            </div>
+            <div class="compare-container">
+                <button id="btn-left" class="outline"></button>
+                <button id="btn-right" class="outline"></button>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="section-results" class="hidden">
+            <h2>Your Ranked List</h2>
+            <ol id="result-list" class="result-list"></ol>
+            <div style="margin-top:1.5rem; display:flex; gap:1rem; flex-wrap:wrap;">
+                <button id="btn-download">Download Sorted List</button>
+                <button id="btn-restart" class="secondary">Start Over</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (() => {
+            const STORAGE_KEY = 'pairwise-sorter-state';
+
+            // DOM elements
+            const resumeBanner = document.getElementById('resume-banner');
+            const btnResume = document.getElementById('btn-resume');
+            const btnDiscard = document.getElementById('btn-discard');
+            const sectionImport = document.getElementById('section-import');
+            const sectionCompare = document.getElementById('section-compare');
+            const sectionResults = document.getElementById('section-results');
+            const fileInput = document.getElementById('file-input');
+            const pasteInput = document.getElementById('paste-input');
+            const btnStart = document.getElementById('btn-start');
+            const btnLeft = document.getElementById('btn-left');
+            const btnRight = document.getElementById('btn-right');
+            const progress = document.getElementById('progress');
+            const progressText = document.getElementById('progress-text');
+            const resultList = document.getElementById('result-list');
+            const btnDownload = document.getElementById('btn-download');
+            const btnRestart = document.getElementById('btn-restart');
+
+            // Sort state
+            let state = null;
+
+            // --- Merge Sort Engine (interactive) ---
+            // We break merge sort into a step-by-step process using a task queue.
+            // State tracks: items (original), runs (list of sorted sub-arrays),
+            // and the current merge operation in progress.
+
+            function initSortState(items) {
+                // Start with each item as a single-element run
+                return {
+                    items: items,
+                    runs: items.map(item => [item]),
+                    // Current merge context
+                    mergeQueue: [], // pairs of [leftRunIndex, rightRunIndex] to merge this pass
+                    currentMerge: null, // { left, right, li, ri, merged }
+                    comparisons: 0,
+                    estimatedTotal: estimateComparisons(items.length),
+                    done: false,
+                    result: null
+                };
+            }
+
+            function estimateComparisons(n) {
+                if (n <= 1) return 0;
+                // Simulate the exact merge passes to count worst-case comparisons
+                let total = 0;
+                let sizes = Array(n).fill(1);
+                while (sizes.length > 1) {
+                    const next = [];
+                    for (let i = 0; i < sizes.length - 1; i += 2) {
+                        total += sizes[i] + sizes[i + 1] - 1;
+                        next.push(sizes[i] + sizes[i + 1]);
+                    }
+                    if (sizes.length % 2 === 1) next.push(sizes[sizes.length - 1]);
+                    sizes = next;
+                }
+                return total;
+            }
+
+            function advanceMergeSort() {
+                // If no current merge and no queue, build next pass
+                if (!state.currentMerge && state.mergeQueue.length === 0) {
+                    if (state.runs.length <= 1) {
+                        // Done!
+                        state.done = true;
+                        state.result = state.runs[0] || [];
+                        return null; // no comparison needed
+                    }
+                    // Build merge queue for this pass
+                    for (let i = 0; i < state.runs.length - 1; i += 2) {
+                        state.mergeQueue.push([i, i + 1]);
+                    }
+                    // If odd number of runs, the last one carries over
+                }
+
+                // If no current merge, start the next one from the queue
+                if (!state.currentMerge) {
+                    if (state.mergeQueue.length === 0) {
+                        // Pass complete — collect merged results and leftover
+                        // This shouldn't happen if logic above is correct
+                        return null;
+                    }
+                    const [li, ri] = state.mergeQueue.shift();
+                    state.currentMerge = {
+                        left: state.runs[li],
+                        right: state.runs[ri],
+                        leftIdx: li,
+                        rightIdx: ri,
+                        li: 0,
+                        ri: 0,
+                        merged: []
+                    };
+                }
+
+                const m = state.currentMerge;
+
+                // If one side is exhausted, finish this merge
+                if (m.li >= m.left.length) {
+                    m.merged = m.merged.concat(m.right.slice(m.ri));
+                    finishCurrentMerge();
+                    return advanceMergeSort();
+                }
+                if (m.ri >= m.right.length) {
+                    m.merged = m.merged.concat(m.left.slice(m.li));
+                    finishCurrentMerge();
+                    return advanceMergeSort();
+                }
+
+                // Need a comparison from the user
+                return { left: m.left[m.li], right: m.right[m.ri] };
+            }
+
+            function finishCurrentMerge() {
+                const m = state.currentMerge;
+                // Replace the two runs with the merged result
+                // Mark runs for replacement
+                state.runs[m.leftIdx] = m.merged;
+                state.runs[m.rightIdx] = null; // mark for removal
+
+                state.currentMerge = null;
+
+                // If queue is empty, this pass is done — compact runs
+                if (state.mergeQueue.length === 0) {
+                    state.runs = state.runs.filter(r => r !== null);
+                }
+            }
+
+            function applyChoice(chooseLeft) {
+                const m = state.currentMerge;
+                if (!m) return;
+                if (chooseLeft) {
+                    m.merged.push(m.left[m.li]);
+                    m.li++;
+                } else {
+                    m.merged.push(m.right[m.ri]);
+                    m.ri++;
+                }
+                state.comparisons++;
+            }
+
+            // --- UI Logic ---
+
+            function showSection(section) {
+                sectionImport.classList.add('hidden');
+                sectionCompare.classList.add('hidden');
+                sectionResults.classList.add('hidden');
+                section.classList.remove('hidden');
+            }
+
+            function saveState() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            }
+
+            function loadState() {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return null;
+                }
+            }
+
+            function clearState() {
+                localStorage.removeItem(STORAGE_KEY);
+                state = null;
+            }
+
+            function parseItems(text) {
+                return text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            }
+
+            function updateProgress() {
+                const pct = Math.min(100, Math.round((state.comparisons / state.estimatedTotal) * 100));
+                progress.value = pct;
+                progressText.textContent = `Comparison ${state.comparisons} of ~${state.estimatedTotal}`;
+            }
+
+            function presentComparison() {
+                const pair = advanceMergeSort();
+                if (state.done) {
+                    showResults();
+                    return;
+                }
+                if (!pair) {
+                    // Shouldn't happen, but just in case
+                    presentComparison();
+                    return;
+                }
+                btnLeft.textContent = pair.left;
+                btnRight.textContent = pair.right;
+                updateProgress();
+                saveState();
+            }
+
+            function showResults() {
+                showSection(sectionResults);
+                resultList.innerHTML = '';
+                state.result.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    resultList.appendChild(li);
+                });
+                saveState();
+            }
+
+            function startSort(items) {
+                if (items.length < 2) {
+                    alert('Please provide at least 2 items to sort.');
+                    return;
+                }
+                state = initSortState(items);
+                showSection(sectionCompare);
+                presentComparison();
+            }
+
+            function resumeSort() {
+                if (state.done) {
+                    showResults();
+                } else {
+                    showSection(sectionCompare);
+                    presentComparison();
+                }
+            }
+
+            // --- Event Handlers ---
+
+            btnStart.addEventListener('click', () => {
+                let items = [];
+                if (fileInput.files && fileInput.files.length > 0) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        items = parseItems(e.target.result);
+                        startSort(items);
+                    };
+                    reader.readAsText(fileInput.files[0]);
+                } else {
+                    items = parseItems(pasteInput.value);
+                    startSort(items);
+                }
+            });
+
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files && fileInput.files.length > 0) {
+                    pasteInput.value = '';
+                    pasteInput.disabled = true;
+                } else {
+                    pasteInput.disabled = false;
+                }
+            });
+
+            btnLeft.addEventListener('click', () => {
+                applyChoice(true);
+                presentComparison();
+            });
+
+            btnRight.addEventListener('click', () => {
+                applyChoice(false);
+                presentComparison();
+            });
+
+            btnDownload.addEventListener('click', () => {
+                if (!state || !state.result) return;
+                const text = state.result.join('\n');
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'sorted-list.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+
+            btnRestart.addEventListener('click', () => {
+                clearState();
+                showSection(sectionImport);
+                fileInput.value = '';
+                pasteInput.value = '';
+                pasteInput.disabled = false;
+                resumeBanner.classList.add('hidden');
+            });
+
+            btnResume.addEventListener('click', () => {
+                resumeBanner.classList.add('hidden');
+                resumeSort();
+            });
+
+            btnDiscard.addEventListener('click', () => {
+                clearState();
+                resumeBanner.classList.add('hidden');
+                showSection(sectionImport);
+            });
+
+            // --- Init ---
+            const saved = loadState();
+            if (saved) {
+                state = saved;
+                resumeBanner.classList.remove('hidden');
+            }
+        })();
+    </script>
+</body>
+
+</html>
