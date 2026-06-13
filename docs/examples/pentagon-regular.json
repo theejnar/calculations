@@ -1,0 +1,227 @@
+{
+  "metadata": {
+    "date": "2026-06-13",
+    "name": "Regular Pentagon",
+    "notes": "Regular pentagon with side length 3, surrounded by equal outer sides of 4 and diagonals of 2.5"
+  },
+  "results": {
+    "coords": {
+      "0": [
+        0.0,
+        0.0
+      ],
+      "1": [
+        2.5,
+        0.0
+      ],
+      "10": [
+        1.8887902719999992,
+        8.035989504000002
+      ],
+      "11": [
+        10.714652672,
+        -0.8149463039999962
+      ],
+      "2": [
+        0.7,
+        2.4
+      ],
+      "3": [
+        3.2,
+        -2.3999999999999995
+      ],
+      "4": [
+        -1.408,
+        3.7439999999999998
+      ],
+      "5": [
+        5.308,
+        -1.0559999999999996
+      ],
+      "6": [
+        0.4724800000000001,
+        5.391360000000001
+      ],
+      "7": [
+        7.18848,
+        -2.703359999999999
+      ],
+      "8": [
+        -0.5824512000000012,
+        7.6578816000000005
+      ],
+      "9": [
+        8.243411199999999,
+        -0.43683839999999896
+      ]
+    },
+    "inner_loop": [
+      9,
+      5,
+      1,
+      2,
+      6,
+      10
+    ],
+    "outer_area": 60.943706667299644,
+    "outer_loop": [
+      11,
+      7,
+      3,
+      0,
+      4,
+      8
+    ],
+    "strategy_a": 34.28083500035604,
+    "strategy_b": 30.943706667299644,
+    "total_triangle_area": 30.0,
+    "triangle_areas": [
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0,
+      3.0
+    ],
+    "warnings": []
+  },
+  "sides": {
+    "d0": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d1": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d2": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d3": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d4": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d5": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d6": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d7": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d8": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "d9": {
+      "length": 2.5,
+      "type": "diagonal"
+    },
+    "i0": {
+      "length": 3.0,
+      "type": "inner"
+    },
+    "i1": {
+      "length": 3.0,
+      "type": "inner"
+    },
+    "i2": {
+      "length": 3.0,
+      "type": "inner"
+    },
+    "i3": {
+      "length": 3.0,
+      "type": "inner"
+    },
+    "i4": {
+      "length": 3.0,
+      "type": "inner"
+    },
+    "o0": {
+      "length": 4.0,
+      "type": "outer"
+    },
+    "o1": {
+      "length": 4.0,
+      "type": "outer"
+    },
+    "o2": {
+      "length": 4.0,
+      "type": "outer"
+    },
+    "o3": {
+      "length": 4.0,
+      "type": "outer"
+    },
+    "o4": {
+      "length": 4.0,
+      "type": "outer"
+    }
+  },
+  "triangles": [
+    [
+      "i0",
+      "d0",
+      "d1"
+    ],
+    [
+      "i1",
+      "d2",
+      "d3"
+    ],
+    [
+      "i2",
+      "d4",
+      "d5"
+    ],
+    [
+      "i3",
+      "d6",
+      "d7"
+    ],
+    [
+      "i4",
+      "d8",
+      "d9"
+    ],
+    [
+      "o0",
+      "d1",
+      "d2"
+    ],
+    [
+      "o1",
+      "d3",
+      "d4"
+    ],
+    [
+      "o2",
+      "d5",
+      "d6"
+    ],
+    [
+      "o3",
+      "d7",
+      "d8"
+    ],
+    [
+      "o4",
+      "d9",
+      "d0"
+    ]
+  ],
+  "version": 1
+}
