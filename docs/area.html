@@ -135,6 +135,14 @@
                 </fieldset>
 
                 <button type="submit" id="calc-btn">Calculate Area</button>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                    <button type="button" id="export-btn" class="secondary" onclick="exportMeasurement()"
+                        disabled>Export JSON</button>
+                    <button type="button" class="secondary outline"
+                        onclick="document.getElementById('import-input').click()">Import JSON</button>
+                    <input type="file" id="import-input" accept=".json" style="display:none"
+                        onchange="importMeasurement(event)">
+                </div>
             </form>
 
             <!-- Results -->
@@ -163,6 +171,9 @@
         let pyodide = null;
         const sideCounts = { inner: 0, outer: 0, diagonal: 0 };
         let triangleCount = 0;
+        let lastCalcSides = null;
+        let lastCalcTriangles = null;
+        let lastCalcResult = null;
 
         async function initPyodide() {
             pyodide = await loadPyodide();
@@ -390,6 +401,100 @@
             });
         }
 
+        function exportMeasurement() {
+            if (!lastCalcSides || !lastCalcTriangles) return;
+
+            const name = prompt("Measurement name (optional):", "") || "";
+            const notes = prompt("Notes (optional):", "") || "";
+
+            const result = pyodide.runPython(`
+import json
+_sides = json.loads('${JSON.stringify(lastCalcSides).replace(/'/g, "\\'")}')
+_triangles = json.loads('${JSON.stringify(lastCalcTriangles).replace(/'/g, "\\'")}')
+_result_raw = calculate_area(_triangles, _sides)
+_json = export_measurement(_sides, _triangles, _result_raw, name=${JSON.stringify(name).replace(/'/g, "\\'")}, notes=${JSON.stringify(notes).replace(/'/g, "\\'")})
+_json
+`);
+
+            const blob = new Blob([result], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `area-measurement-${dateStr}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importMeasurement(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const jsonStr = e.target.result;
+                    // Validate via Python
+                    const resultStr = pyodide.runPython(`
+import json
+_json_str = json.loads(${JSON.stringify(JSON.stringify(jsonStr))})
+_imported = import_measurement(_json_str)
+json.dumps(_imported)
+`);
+                    const imported = JSON.parse(resultStr);
+
+                    // Show metadata if present
+                    if (imported.metadata && (imported.metadata.name || imported.metadata.notes)) {
+                        let info = "Imported measurement";
+                        if (imported.metadata.name) info += `\\nName: ${imported.metadata.name}`;
+                        if (imported.metadata.date) info += `\\nDate: ${imported.metadata.date}`;
+                        if (imported.metadata.notes) info += `\\nNotes: ${imported.metadata.notes}`;
+                        alert(info);
+                    }
+
+                    populateFormFromData(imported.sides, imported.triangles);
+
+                } catch (err) {
+                    showError("Import failed: " + (err.message || String(err)));
+                }
+            };
+            reader.readAsText(file);
+            // Reset input so re-importing same file works
+            event.target.value = "";
+        }
+
+        function populateFormFromData(sides, triangles) {
+            // Clear existing
+            document.getElementById('inner-sides').innerHTML = '';
+            document.getElementById('outer-sides').innerHTML = '';
+            document.getElementById('diagonal-sides').innerHTML = '';
+            document.getElementById('triangles').innerHTML = '';
+            sideCounts.inner = 0;
+            sideCounts.outer = 0;
+            sideCounts.diagonal = 0;
+            triangleCount = 0;
+
+            // Add sides grouped by type
+            const ordered = Object.entries(sides).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+            for (const [name, info] of ordered) {
+                addSide(info.type);
+                const rows = document.getElementById(`${info.type}-sides`).querySelectorAll('.side-row');
+                const lastRow = rows[rows.length - 1];
+                lastRow.querySelector('input').value = info.length;
+            }
+
+            // Add triangles
+            for (const tri of triangles) {
+                addTriangle();
+                const container = document.getElementById('triangles');
+                const row = container.lastElementChild;
+                const selects = row.querySelectorAll('select');
+                selects[0].value = tri[0];
+                selects[1].value = tri[1];
+                selects[2].value = tri[2];
+            }
+        }
+
         function suggestTriangles() {
             try {
                 const sides = {};
@@ -463,6 +568,11 @@ json.dumps(_out)
                     coordsMap[k] = v;
                 });
                 parsed.coords = coordsMap;
+
+                lastCalcSides = sides;
+                lastCalcTriangles = triangles;
+                lastCalcResult = parsed;
+                document.getElementById("export-btn").disabled = false;
 
                 showResult(parsed);
                 drawPreview(parsed);
