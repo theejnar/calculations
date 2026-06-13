@@ -3,8 +3,10 @@
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 # pylint: disable=too-many-nested-blocks
 
+import json
 import math
 from collections import deque
+from datetime import date
 
 
 class MeasurementError(Exception):
@@ -593,4 +595,133 @@ def calculate_area(triangles, sides):
         "outer_loop": outer_loop,
         "tri_vertex_ids": tri_vertex_ids,
         "warnings": warnings,
+    }
+
+
+def export_measurement(sides, triangles, result=None, name="", notes=""):
+    """Export sides, triangles, and optional results to a JSON string.
+
+    Args:
+        sides: dict of side definitions (name -> {length, type})
+        triangles: list of triangle definitions (each a list of 3 side names)
+        result: optional dict returned by calculate_area()
+        name: optional measurement/project name
+        notes: optional free-text notes
+
+    Returns:
+        A JSON string representing the full measurement data.
+    """
+    data = {
+        "version": 1,
+        "metadata": {
+            "name": name,
+            "date": str(date.today()),
+            "notes": notes,
+        },
+        "sides": sides,
+        "triangles": triangles,
+    }
+
+    if result is not None:
+        # Convert coord tuples to lists for JSON serialization
+        coords_serializable = {k: list(v) for k, v in result.get("coords", {}).items()}
+        data["results"] = {
+            "strategy_a": result["strategy_a"],
+            "strategy_b": result["strategy_b"],
+            "outer_area": result["outer_area"],
+            "total_triangle_area": result["total_triangle_area"],
+            "triangle_areas": result["triangle_areas"],
+            "coords": coords_serializable,
+            "inner_loop": result["inner_loop"],
+            "outer_loop": result["outer_loop"],
+            "warnings": result.get("warnings", []),
+        }
+
+    return json.dumps(data, indent=2)
+
+
+def import_measurement(json_str):
+    """Import measurement data from a JSON string.
+
+    Args:
+        json_str: JSON string (as produced by export_measurement)
+
+    Returns:
+        dict with keys: "sides", "triangles", "metadata", and optionally "results"
+
+    Raises:
+        MeasurementError: if the JSON is malformed or contains invalid data
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError) as e:
+        raise MeasurementError(f"Invalid JSON: {e}") from e
+
+    if not isinstance(data, dict):
+        raise MeasurementError("Expected a JSON object at top level.")
+
+    if "version" not in data:
+        raise MeasurementError("Missing 'version' field in import data.")
+
+    version = data["version"]
+    if version != 1:
+        raise MeasurementError(
+            f"Unsupported version {version}. This tool supports version 1."
+        )
+
+    if "sides" not in data:
+        raise MeasurementError("Missing 'sides' field in import data.")
+    if "triangles" not in data:
+        raise MeasurementError("Missing 'triangles' field in import data.")
+
+    sides = data["sides"]
+    if not isinstance(sides, dict):
+        raise MeasurementError("'sides' must be a JSON object.")
+
+    valid_types = {"inner", "outer", "diagonal"}
+    for name, entry in sides.items():
+        if not isinstance(entry, dict):
+            raise MeasurementError(f"Side '{name}' must be an object.")
+        if "length" not in entry:
+            raise MeasurementError(f"Side '{name}' missing 'length'.")
+        if "type" not in entry:
+            raise MeasurementError(f"Side '{name}' missing 'type'.")
+        try:
+            entry["length"] = float(entry["length"])
+        except (ValueError, TypeError) as e:
+            raise MeasurementError(
+                f"Side '{name}' has invalid length: {entry['length']}"
+            ) from e
+        if entry["length"] <= 0:
+            raise MeasurementError(
+                f"Side '{name}' length must be positive, got {entry['length']}"
+            )
+        if entry["type"] not in valid_types:
+            raise MeasurementError(
+                f"Side '{name}' has invalid type '{entry['type']}'. "
+                f"Must be one of: {', '.join(sorted(valid_types))}"
+            )
+
+    triangles = data["triangles"]
+    if not isinstance(triangles, list):
+        raise MeasurementError("'triangles' must be a list.")
+    for i, tri in enumerate(triangles):
+        if not isinstance(tri, list) or len(tri) != 3:
+            raise MeasurementError(
+                f"Triangle {i} must be a list of exactly 3 side names."
+            )
+        for side_name in tri:
+            if side_name not in sides:
+                raise MeasurementError(
+                    f"Triangle {i} references unknown side '{side_name}'."
+                )
+
+    metadata = data.get("metadata", {})
+    results = data.get("results", None)
+
+    return {
+        "sides": sides,
+        "triangles": triangles,
+        "metadata": metadata,
+        "results": results,
     }
