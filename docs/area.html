@@ -135,13 +135,20 @@
                 </fieldset>
 
                 <button type="submit" id="calc-btn">Calculate Area</button>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;align-items:center;">
                     <button type="button" id="export-btn" class="secondary" onclick="exportMeasurement()"
                         disabled>Export JSON</button>
                     <button type="button" class="secondary outline"
                         onclick="document.getElementById('import-input').click()">Import JSON</button>
                     <input type="file" id="import-input" accept=".json" style="display:none"
                         onchange="importMeasurement(event)">
+                    <select id="example-select" onchange="loadExample(this.value)" style="margin:0;width:auto;">
+                        <option value="">Load example…</option>
+                        <option value="examples/pentagon-regular.json">Regular Pentagon</option>
+                        <option value="examples/hexagon-regular.json">Regular Hexagon</option>
+                        <option value="examples/heptagon-irregular.json">Irregular Heptagon</option>
+                        <option value="examples/house-outline.json">House Outline</option>
+                    </select>
                 </div>
             </form>
 
@@ -493,6 +500,19 @@ json.dumps(_imported)
                 selects[1].value = tri[1];
                 selects[2].value = tri[2];
             }
+        }
+
+        async function loadExample(path) {
+            if (!path) return;
+            try {
+                const resp = await fetch(path);
+                if (!resp.ok) throw new Error(`Failed to load ${path}: ${resp.status}`);
+                const data = await resp.json();
+                populateFormFromData(data.sides, data.triangles);
+            } catch (e) {
+                showError("Failed to load example: " + (e.message || String(e)));
+            }
+            document.getElementById('example-select').value = '';
         }
 
         function suggestTriangles() {
