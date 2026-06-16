@@ -1,6 +1,42 @@
-# Distance Combination Calculator — Web App
+# Calculations — Web Apps
 
-A browser-based calculator that finds the best combination of distances with gaps fitting a total length. Runs entirely client-side using Python compiled to WebAssembly (Pyodide).
+A collection of browser-based calculation tools. No server needed — everything runs in your browser using Python compiled to WebAssembly (Pyodide).
+
+## Available Calculators
+
+### Distance Combination Calculator (`distance-combination.html`)
+
+Find the best combination of distances with gaps that fit a total length. Supports import/export of settings and preset examples.
+
+**CLI usage:**
+
+```bash
+# From a JSON settings file
+python3 docs/distance_combination_cli.py -f docs/examples/distance-3-sizes.json
+
+# With inline arguments
+python3 docs/distance_combination_cli.py -d "70 95 120" --from-gap 10 --to-gap 20 --total-length 5000
+
+# Export current settings to a file
+python3 docs/distance_combination_cli.py -d "70 95 120" --from-gap 10 --to-gap 20 --total-length 5000 -e my-settings.json
+```
+
+| Field | Description |
+|-------|-------------|
+| Distances | 1–10 space-separated values (e.g. `70 95 120`) |
+| From gap | Minimum allowed gap between items |
+| To gap | Maximum allowed gap between items |
+| Total length | Target total length to fill |
+| Tolerance (advanced) | How close the result must match the total length (default: `0.001`) |
+| Gap step (advanced) | Resolution for rounding the gap value (default: `0.1`) |
+
+### Area Calculator via Triangulation (`area.html`)
+
+Calculate any polygon's area by measuring the sides of surrounding triangles. Supports importing polygon definitions from JSON.
+
+### Pairwise List Sorter (`sort.html`)
+
+Rank a list of items by personal preference using pairwise comparisons. Import, sort, and export.
 
 ## Test locally
 
@@ -27,14 +63,3 @@ Then open http://localhost:8080 in your browser.
    ```
    https://<your-username>.github.io/<repo-name>/
    ```
-
-## Inputs
-
-| Field | Description |
-|-------|-------------|
-| Distances | 1–10 space-separated values (e.g. `25.5 40 80`) |
-| From gap | Minimum allowed gap between items |
-| To gap | Maximum allowed gap between items |
-| Total length | Target total length to fill |
-| Tolerance (advanced) | How close the result must match the total length (default: `0.001`) |
-| Gap step (advanced) | Resolution for rounding the gap value (default: `0.1`) |
