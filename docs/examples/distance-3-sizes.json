@@ -1,0 +1,8 @@
+{
+  "distances": "70 95 120",
+  "from_gap": 10,
+  "gap_step": 0.1,
+  "to_gap": 20,
+  "tolerance": 0.001,
+  "total_length": 5000
+}
