@@ -27,6 +27,24 @@
         details {
             margin-bottom: 1rem;
         }
+
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .toolbar select {
+            margin-bottom: 0;
+            flex: 1;
+        }
+
+        .toolbar button {
+            margin-bottom: 0;
+            width: auto;
+        }
     </style>
 </head>
 
@@ -40,6 +58,15 @@
         </div>
 
         <form id="calc-form" style="display:none;" onsubmit="return false;">
+            <div class="toolbar">
+                <select id="examples" aria-label="Load example">
+                    <option value="">Load example…</option>
+                    <option value="1">70 95 120 | length 5000 | gap 10–20</option>
+                    <option value="2">70 95 120 195 220 | length 5000 | gap 10–15</option>
+                </select>
+                <button type="button" class="secondary" id="import-btn">Import</button>
+                <button type="button" class="secondary" id="export-btn">Export</button>
+            </div>
             <fieldset>
                 <label for="distances">
                     Distances
@@ -102,7 +129,7 @@
 
         async function initPyodide() {
             pyodide = await loadPyodide();
-            const response = await fetch("calc.py");
+            const response = await fetch("distance_combination.py");
             const code = await response.text();
             await pyodide.runPythonAsync(code);
             document.getElementById("loading").style.display = "none";
@@ -195,6 +222,67 @@ json.dumps(result) if result else ""
                 btn.removeAttribute("aria-busy");
                 btn.disabled = false;
             }
+        });
+
+        // Examples presets
+        const examples = {
+            "1": { distances: "70 95 120", from_gap: 10, to_gap: 20, total_length: 5000 },
+            "2": { distances: "70 95 120 195 220", from_gap: 10, to_gap: 15, total_length: 5000 }
+        };
+
+        document.getElementById("examples").addEventListener("change", (e) => {
+            const preset = examples[e.target.value];
+            if (!preset) return;
+            document.getElementById("distances").value = preset.distances;
+            document.getElementById("from_gap").value = preset.from_gap;
+            document.getElementById("to_gap").value = preset.to_gap;
+            document.getElementById("total_length").value = preset.total_length;
+        });
+
+        // Export current form values as JSON
+        document.getElementById("export-btn").addEventListener("click", () => {
+            const data = {
+                distances: document.getElementById("distances").value.trim(),
+                from_gap: parseFloat(document.getElementById("from_gap").value) || 0,
+                to_gap: parseFloat(document.getElementById("to_gap").value) || 0,
+                total_length: parseFloat(document.getElementById("total_length").value) || 0,
+                tolerance: parseFloat(document.getElementById("tolerance").value) || 0.001,
+                gap_step: parseFloat(document.getElementById("gap_step").value) || 0.1
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "distance-combination-settings.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Import form values from JSON file
+        document.getElementById("import-btn").addEventListener("click", () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.addEventListener("change", () => {
+                const file = input.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const data = JSON.parse(reader.result);
+                        if (data.distances) document.getElementById("distances").value = data.distances;
+                        if (data.from_gap != null) document.getElementById("from_gap").value = data.from_gap;
+                        if (data.to_gap != null) document.getElementById("to_gap").value = data.to_gap;
+                        if (data.total_length != null) document.getElementById("total_length").value = data.total_length;
+                        if (data.tolerance != null) document.getElementById("tolerance").value = data.tolerance;
+                        if (data.gap_step != null) document.getElementById("gap_step").value = data.gap_step;
+                    } catch (err) {
+                        showError("Invalid JSON file.");
+                    }
+                };
+                reader.readAsText(file);
+            });
+            input.click();
         });
 
         initPyodide();
